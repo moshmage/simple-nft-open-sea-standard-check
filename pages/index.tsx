@@ -1,8 +1,113 @@
 import Head from 'next/head'
-import Image from 'next/image'
+
 import styles from '../styles/Home.module.css'
+import {Erc721Standard, Web3Connection} from "@taikai/dappkit";
+import {useEffect, useState} from "react";
+import {ImportToken} from "./components/import-token";
+
+interface Token {name: string, symbol: string, balance: number, error: boolean|null, address: string}
+type TokenList = Token[];
 
 export default function Home() {
+
+  const [web3Host, setWeb3Host] = useState('https://eth-diogenes.taikai.network:8080');
+  const [privateKey, setPrivateKey] = useState('');
+  const [web3Connection, setWeb3Connection] = useState<any>(null);
+  const [walletAddress, setWalletAddress] = useState('');
+
+  const [list, setList] = useState<TokenList>([]);
+
+  async function connect() {
+    try {
+    const _web3Connection = new Web3Connection({ web3Host, privateKey });
+    _web3Connection.start();
+    if (!_web3Connection.options.privateKey) await _web3Connection.connect();
+    setWalletAddress(await _web3Connection.getAddress());
+
+
+      setWeb3Connection(_web3Connection);
+    } catch (e) {
+      console.error(`e`, e)
+    }
+
+  }
+
+  async function checkNftList(forList?: TokenList) {
+    const _list = Array.from(forList || list);
+
+    async function mapToken(token: Token): Promise<Token> {
+
+      console.log(`token`, token);
+
+      if (!token.balance)
+        return {...token};
+
+      const _nft = new Erc721Standard(web3Connection, token.address);
+      _nft.loadContract();
+
+      const uris = await Promise.all(
+        Array(token.balance)
+          .map((v,i) => i+1)
+          .map(i => _nft.callTx(_nft.contract.methods.tokenURI(i)))).catch(_ => []);
+
+      if (!uris.length)
+        return {...token, error: true}
+
+      const invalidURI =
+        uris.some(v => {
+          if (!v)
+            return true;
+
+          try {
+            new URL(v);
+          } catch (e) {
+            return true;
+          }
+
+          return false;
+        });
+
+      if (invalidURI)
+        return {...token, error: true};
+
+      const jsonDataForTokens = await Promise.all(uris.map(uri => fetch(uri).then(d => d.json()).catch(_ => null)));
+      if (jsonDataForTokens === null)
+        return {...token, error: true};
+
+      if (jsonDataForTokens.some(data => ['image', 'name',].some(v => !data?.[v])))
+        return {...token, error: true};
+
+      return {
+        ...token,
+        error: false
+      }
+    }
+
+    const __list = await Promise.all(_list.map(mapToken))
+
+    console.log(__list)
+
+    setList(__list);
+  }
+
+  async function loadToken(address: string) {
+    if (!web3Connection)
+      return;
+
+    const _nft = new Erc721Standard(web3Connection, address);
+    _nft.loadContract();
+    const name = await _nft.callTx(_nft.contract.methods.name());
+    const symbol = await _nft.callTx(_nft.contract.methods.symbol());
+    const balance = await _nft.callTx(_nft.contract.methods.balanceOf(walletAddress));
+
+    setList([...list, {name, balance, symbol, address, error: null}]);
+
+    await checkNftList([...list, {name, balance, symbol, address, error: null}]);
+  }
+
+  // useEffect(() => { checkNftList() }, [list]);
+  //0x5D1cE1F75bC46c871Eb59A72252dA5bD2e40078E name symbol
+  //0x4Cf33D9Fe02De4050B62762AC1ccBEEC1Be25AF3 new name symbol
   return (
     <div className={styles.container}>
       <Head>
@@ -11,61 +116,29 @@ export default function Home() {
         <link rel="icon" href="/favicon.ico" />
       </Head>
 
+
+
       <main className={styles.main}>
-        <h1 className={styles.title}>
-          Welcome to <a href="https://nextjs.org">Next.js!</a>
-        </h1>
+        <h1 className={styles.title}>Connect your wallet</h1>
 
-        <p className={styles.description}>
-          Get started by editing{' '}
-          <code className={styles.code}>pages/index.tsx</code>
-        </p>
-
-        <div className={styles.grid}>
-          <a href="https://nextjs.org/docs" className={styles.card}>
-            <h2>Documentation &rarr;</h2>
-            <p>Find in-depth information about Next.js features and API.</p>
-          </a>
-
-          <a href="https://nextjs.org/learn" className={styles.card}>
-            <h2>Learn &rarr;</h2>
-            <p>Learn about Next.js in an interactive course with quizzes!</p>
-          </a>
-
-          <a
-            href="https://github.com/vercel/next.js/tree/canary/examples"
-            className={styles.card}
-          >
-            <h2>Examples &rarr;</h2>
-            <p>Discover and deploy boilerplate example Next.js projects.</p>
-          </a>
-
-          <a
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-            className={styles.card}
-          >
-            <h2>Deploy &rarr;</h2>
-            <p>
-              Instantly deploy your Next.js site to a public URL with Vercel.
-            </p>
-          </a>
+        <div>
+          <input placeholder="Web3 RPC" onChange={(e) => setWeb3Host(e.target.value)}/>
+          <input placeholder="Private Key" />
+          <button onClick={() => connect()}>connect</button>
         </div>
+
+        {(web3Connection && walletAddress && <>
+            <div className={styles.grid}>
+              <ImportToken onImport={(a) => loadToken(a)} />
+            </div>
+
+            {list.map(token => <li key={token.address}>{token.name} {token.symbol} {token.balance}  error? {token.error === null ? 'n/a' : token.error ? 'yes' : 'no'}</li>)}
+          </>
+          ) || ''}
+
       </main>
 
-      <footer className={styles.footer}>
-        <a
-          href="https://vercel.com?utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Powered by{' '}
-          <span className={styles.logo}>
-            <Image src="/vercel.svg" alt="Vercel Logo" width={72} height={16} />
-          </span>
-        </a>
-      </footer>
+
     </div>
   )
 }
