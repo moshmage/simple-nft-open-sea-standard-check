@@ -74,6 +74,7 @@ export default function Home() {
       if (jsonDataForTokens === null)
         return {...token, error: true};
 
+      // note: these are the props used by opensea from the example nft https://api.opensea.io/api/v2/metadata/matic/0x2953399124F0cBB46d2CbACD8A89cF0599974963/55928153429683830984991106142932552122665112751371519121782196555884395495425?format=json
       if (jsonDataForTokens.some(data => ['image', 'name',].some(v => !data?.[v])))
         return {...token, error: true};
 
