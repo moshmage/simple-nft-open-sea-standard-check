@@ -20,35 +20,32 @@ export default function Home() {
 
   const [web3Host, setWeb3Host] = useState('https://eth-diogenes.taikai.network:8080');
   const [privateKey, setPrivateKey] = useState('');
-  const [web3Connection, setWeb3Connection] = useState<any>(null);
+  const [web3Connection, setWeb3Connection] = useState<Web3Connection|null>(null);
   const [walletAddress, setWalletAddress] = useState('');
 
   const [list, setList] = useState<TokenList>([]);
 
   async function connect() {
-    try {
     const _web3Connection = new Web3Connection({ web3Host, privateKey });
     _web3Connection.start();
-    if (!_web3Connection.options.privateKey) await _web3Connection.connect();
+
+    if (!_web3Connection.options.privateKey)
+      await _web3Connection.connect();
+
     setWalletAddress(await _web3Connection.getAddress());
-
-
-      setWeb3Connection(_web3Connection);
-    } catch (e) {
-      console.error(`e`, e)
-    }
-
+    setWeb3Connection(_web3Connection);
   }
 
   async function checkNftList(forList?: TokenList) {
-    const _list = Array.from(forList || list);
+    if (!web3Connection)
+      return;
 
     async function mapToken(token: Token): Promise<Token> {
 
       if (!token.balance)
         return {...token};
 
-      const _nft = new Erc721Standard(web3Connection, token.address);
+      const _nft = new Erc721Standard(web3Connection!, token.address);
       _nft.loadContract();
 
       const uris = await Promise.all(
@@ -91,7 +88,7 @@ export default function Home() {
       }
     }
 
-    setList(await Promise.all(_list.map(mapToken)));
+    setList(await Promise.all(Array.from(forList || list).map(mapToken)));
   }
 
   async function loadToken(address: string) {
@@ -104,14 +101,18 @@ export default function Home() {
     const symbol = await _nft.callTx(_nft.contract.methods.symbol());
     const balance = await _nft.callTx(_nft.contract.methods.balanceOf(walletAddress));
 
-    setList([...list, {name, balance, symbol, address, error: null}]);
+    const newList = [...list, {name, balance, symbol, address, error: null}]
 
-    await checkNftList([...list, {name, balance, symbol, address, error: null}]);
+    setList(newList);
+
+    await checkNftList(newList);
   }
 
-  // useEffect(() => { checkNftList() }, [list]);
-  //0x5D1cE1F75bC46c871Eb59A72252dA5bD2e40078E name symbol
-  //0x4Cf33D9Fe02De4050B62762AC1ccBEEC1Be25AF3 new name symbol
+
+  // these nfts are deployed on DIOGENES network
+  // 0x5D1cE1F75bC46c871Eb59A72252dA5bD2e40078E name symbol
+  // 0x4Cf33D9Fe02De4050B62762AC1ccBEEC1Be25AF3 new name symbol
+
   return (
     <div className={styles.container}>
       <Head>
@@ -152,7 +153,6 @@ export default function Home() {
           ) || ''}
 
       </main>
-
 
     </div>
   )
