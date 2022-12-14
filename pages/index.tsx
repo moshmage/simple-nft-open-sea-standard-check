@@ -5,7 +5,15 @@ import {Erc721Standard, Web3Connection} from "@taikai/dappkit";
 import {useEffect, useState} from "react";
 import {ImportToken} from "./components/import-token";
 
-interface Token {name: string, symbol: string, balance: number, error: boolean|null, address: string}
+interface Token {
+  name: string,
+  symbol: string,
+  balance: number,
+  error: boolean | null,
+  address: string
+  owned?: { image?: string; name?: string; }[];
+}
+
 type TokenList = Token[];
 
 export default function Home() {
@@ -36,8 +44,6 @@ export default function Home() {
     const _list = Array.from(forList || list);
 
     async function mapToken(token: Token): Promise<Token> {
-
-      console.log(`token`, token);
 
       if (!token.balance)
         return {...token};
@@ -80,15 +86,12 @@ export default function Home() {
 
       return {
         ...token,
-        error: false
+        error: false,
+        owned: jsonDataForTokens,
       }
     }
 
-    const __list = await Promise.all(_list.map(mapToken))
-
-    console.log(__list)
-
-    setList(__list);
+    setList(await Promise.all(_list.map(mapToken)));
   }
 
   async function loadToken(address: string) {
@@ -133,7 +136,18 @@ export default function Home() {
               <ImportToken onImport={(a) => loadToken(a)} />
             </div>
 
-            {list.map(token => <li key={token.address}>{token.name} {token.symbol} {token.balance}  error? {token.error === null ? 'n/a' : token.error ? 'yes' : 'no'}</li>)}
+            <ul>
+              {
+                list.map(token =>
+                  <li key={token.address}>
+                    {token.name} {token.symbol} {token.balance}  error? {token.error === null ? 'n/a' : token.error ? 'yes' : 'no'}
+                    <ul>
+                      {token.owned?.map(({image, name}, i) => <li key={i}>{name} <img src={image}/></li>)}
+                    </ul>
+                  </li>
+                )
+              }
+            </ul>
           </>
           ) || ''}
 
